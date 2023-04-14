@@ -14,7 +14,7 @@ import org.apache.hadoop.mapred.TextOutputFormat;
 public class KmeansRunner {
     public static void main(String[] args) throws IOException{
         JobConf conf = new JobConf(KmeansRunner.class);
-        conf.setJobName("WordCount");
+        conf.setJobName("Kmeans");
         conf.setOutputKeyClass(Text.class);
         conf.setOutputValueClass(IntWritable.class);
         conf.setMapperClass(KmeansMapper.class);

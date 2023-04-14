@@ -1,3 +1,5 @@
+package gr.aueb.dmst.nickkatsios;
+
 import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;

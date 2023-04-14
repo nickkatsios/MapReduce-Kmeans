@@ -1,3 +1,5 @@
+package gr.aueb.dmst.nickkatsios;
+
 import java.awt.Color;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
