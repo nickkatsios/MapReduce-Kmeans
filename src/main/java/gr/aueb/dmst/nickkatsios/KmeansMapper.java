@@ -1,27 +1,47 @@
 package gr.aueb.dmst.nickkatsios;
 
-import java.awt.*;
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.io.DoubleWritable;
+import org.apache.hadoop.io.Text;
+import org.apache.hadoop.mapreduce.Job;
+import org.apache.hadoop.mapreduce.Mapper;
+import org.apache.hadoop.mapreduce.Reducer;
+import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
+import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
+
 import java.awt.geom.Point2D;
 import java.io.BufferedReader;
 import java.io.FileReader;
 import java.io.IOException;
-import org.apache.hadoop.mapred.MapReduceBase;
-import org.apache.hadoop.mapred.Mapper;
-import org.apache.hadoop.mapred.OutputCollector;
-import org.apache.hadoop.mapred.Reporter;
-public class KmeansMapper extends MapReduceBase implements Mapper<Point2D.Double,Point2D.Double, Point2D.Double,Point2D.Double>{
+import java.util.ArrayList;
+import java.util.List;
+public class KmeansMapper extends Mapper<Object, Text, DoubleWritable, Text> {
+    private final List<Point2D.Double> centers = new ArrayList<>();
+    @Override
+    protected void setup(Context context) throws IOException, InterruptedException {
+        // Load the initial centers from a file
+        // For simplicity, we assume that the initial centers are provided as a file in the distributed cache
+        // You can also use a database or other external storage to store the centers
+        Path[] files = context.getLocalCacheFiles();
+        if (files != null && files.length > 0) {
+            // Read the centers from the file
+            // Each line in the file contains a center with x and y coordinates separated by a comma
+            // For example: 1.0,2.0
+            BufferedReader reader = new BufferedReader(new FileReader(files[0].toString()));
+            String line;
+            while ((line = reader.readLine()) != null) {
+                String[] parts = line.split(",");
+                if (parts.length == 2) {
+                    Point2D.Double center = new Point2D.Double(Double.parseDouble(parts[0]), Double.parseDouble(parts[1]));
+                    centers.add(center);
+                }
+            }
+            reader.close();
+        }
+    }
 
-    // Define the centers of the three clusters
-        double x1 = 0.5;
-        double y1 = 0.5;
-        Point2D.Double center1 = new Point2D.Double(x1 ,y1);
-        double x2 = -0.5;
-        double y2 = -0.5;
-        Point2D.Double center2 = new Point2D.Double(x2 ,y2);
-        double x3 = 1.0;
-        double y3 = -1.0;
-        Point2D.Double center3 = new Point2D.Double(x3 ,y3);
-        Point2D.Double[] centers = {center1 , center2 , center3};
+
 
     /**
      *
@@ -39,34 +59,27 @@ public class KmeansMapper extends MapReduceBase implements Mapper<Point2D.Double
         return Math.sqrt((y2 - y1) * (y2 - y1) + (x2 - x1) * (x2 - x1));
     }
 
-    public void map(Point2D.Double key, Point2D.Double value, OutputCollector<Point2D.Double,Point2D.Double> output,
-                    Reporter reporter) throws IOException{
-        BufferedReader reader = new BufferedReader(new FileReader("data.txt"));
-        String line = null;
-        // iterate through the lines of the txt file
-        while ((line = reader.readLine()) != null) {
-            // split them at " "
-            String[] points = line.split(" ");
-            // extract the x , y coordinates
-            double x = Double.parseDouble(points[0]);
-            double y = Double.parseDouble(points[1]);
-            // construct the point
-            Point2D.Double point = new Point2D.Double(x ,y);
-            // calculate the distance fom each center and keep the minimum
-            Point2D.Double nearest_center = centers[0];
-            double minDist = Double.MAX_VALUE;
-            for(int i = 0 ; i < centers.length ; i++) {
-                double dist = calculateDistanceBetweenPoints(point.getX() , point.getY() , centers[i].getX() , centers[i].getY());
-                if(dist < minDist) {
-                    minDist = dist;
-                    nearest_center = centers[i];
+    @Override
+    public void map(Object key, Text value, Context context) throws IOException, InterruptedException {
+        // Parse the point from the input value
+        String[] parts = value.toString().split(" ");
+        if (parts.length == 2) {
+            Point2D.Double point = new Point2D.Double(Double.parseDouble(parts[0]), Double.parseDouble(parts[1]));
+
+            // Find the nearest center for the point
+            int nearestCenter = -1;
+            double minDistance = Double.MAX_VALUE;
+            for (int i = 0; i < centers.size(); i++) {
+                Point2D.Double center = centers.get(i);
+                double distance = calculateDistanceBetweenPoints(point.getX() , point.getY() , center.getX() , center.getY());
+                if (distance < minDistance) {
+                    nearestCenter = i;
+                    minDistance = distance;
                 }
             }
-            // Emit the nearest center and the point to the reducer
-            output.collect(nearest_center, point);
 
+            // Emit the point with the nearest center as the key
+            context.write(new DoubleWritable(nearestCenter), value);
         }
-
     }
-
 }
