@@ -1,15 +1,9 @@
 package gr.aueb.dmst.nickkatsios;
 
-import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.DoubleWritable;
 import org.apache.hadoop.io.Text;
-import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.mapreduce.Mapper;
-import org.apache.hadoop.mapreduce.Reducer;
-import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
-import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
-
 import java.awt.geom.Point2D;
 import java.io.BufferedReader;
 import java.io.FileReader;
@@ -41,8 +35,6 @@ public class KmeansMapper extends Mapper<Object, Text, DoubleWritable, Text> {
         }
     }
 
-
-
     /**
      *
      * @param x1 the x of the first point
@@ -65,7 +57,6 @@ public class KmeansMapper extends Mapper<Object, Text, DoubleWritable, Text> {
         String[] parts = value.toString().split(" ");
         if (parts.length == 2) {
             Point2D.Double point = new Point2D.Double(Double.parseDouble(parts[0]), Double.parseDouble(parts[1]));
-
             // Find the nearest center for the point
             int nearestCenter = -1;
             double minDistance = Double.MAX_VALUE;
