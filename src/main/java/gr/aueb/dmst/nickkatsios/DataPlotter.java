@@ -1,5 +1,4 @@
 package gr.aueb.dmst.nickkatsios;
-
 import java.awt.Color;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
@@ -7,49 +6,66 @@ import java.awt.RenderingHints;
 import java.io.BufferedReader;
 import java.io.FileReader;
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
 import javax.swing.JFrame;
 import javax.swing.JPanel;
 
-public class DataPlotter {
-    public static void main(String[] args) throws IOException {
+public class DataPlotter extends JPanel {
+    private List<Double> xValues;
+    private List<Double> yValues;
+
+    public DataPlotter() {
+        super();
+        xValues = new ArrayList<Double>();
+        yValues = new ArrayList<Double>();
+
         // Read the data points from the file
-        BufferedReader reader = new BufferedReader(new FileReader("data.txt"));
-        double[][] points = new double[1500000][2];
-        String line;
-        int index = 0;
-        while ((line = reader.readLine()) != null) {
-            String[] parts = line.split(" ");
-            double x = Double.parseDouble(parts[0]);
-            double y = Double.parseDouble(parts[1]);
-            points[index][0] = x;
-            points[index][1] = y;
-            index++;
-        }
-        reader.close();
-
-        // Create a panel to draw the points
-        JPanel panel = new JPanel() {
-            @Override
-            protected void paintComponent(Graphics g) {
-                super.paintComponent(g);
-                Graphics2D g2d = (Graphics2D) g;
-                g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-                g2d.setColor(Color.BLUE);
-                for (int i = 0; i < points.length; i++) {
-                    double x = points[i][0];
-                    double y = points[i][1];
-                    int px = (int) (x * 100) + 400; // Scale the x coordinate and add an offset
-                    int py = (int) (y * 100) + 400; // Scale the y coordinate and add an offset
-                    g2d.drawOval(px - 2, py - 2, 4, 4); // Draw a small circle for each point
-                }
+        try (BufferedReader br = new BufferedReader(new FileReader("data.txt"))) {
+            String line;
+            while ((line = br.readLine()) != null) {
+                String[] values = line.split(" ");
+                xValues.add(Double.parseDouble(values[0]));
+                yValues.add(Double.parseDouble(values[1]));
             }
-        };
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
 
-        // Display the panel in a frame
-        JFrame frame = new JFrame("Data Plot");
+    @Override
+    public void paintComponent(Graphics g) {
+        super.paintComponent(g);
+        Graphics2D g2d = (Graphics2D) g;
+
+        // Set anti-aliasing for smoother graphics
+        g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+
+        // Set background color
+        g2d.setBackground(Color.WHITE);
+
+        // Set point color and size
+        g2d.setColor(Color.BLUE);
+        int pointSize = 3;
+
+        // Scale factor to fit the data points on the panel
+        double scaleX = getWidth() / 200000.0;
+        double scaleY = getHeight() / 200000.0;
+
+        // Plot the data points
+        for (int i = 0; i < xValues.size(); i++) {
+            int x = (int) (xValues.get(i) * scaleX + getWidth() / 2.0);
+            int y = (int) (yValues.get(i) * scaleY + getHeight() / 2.0);
+            g2d.fillOval(x, y, pointSize, pointSize);
+        }
+    }
+
+    public static void main(String[] args) {
+        JFrame frame = new JFrame("Data Plotter");
         frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         frame.setSize(800, 800);
-        frame.add(panel);
+        DataPlotter plotter = new DataPlotter();
+        frame.add(plotter);
         frame.setVisible(true);
     }
 }

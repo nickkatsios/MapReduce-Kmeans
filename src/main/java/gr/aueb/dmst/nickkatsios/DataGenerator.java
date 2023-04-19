@@ -1,51 +1,58 @@
 package gr.aueb.dmst.nickkatsios;
-
-import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.util.Random;
 
-
 public class DataGenerator {
     public static void main(String[] args) throws IOException {
-        // Define the number of data points
-        int numPoints = 1500000;
+        int numPoints = 1100000; // Number of data points to generate
 
         // Define the centers of the three clusters
-        double x1 = 0.5;
-        double y1 = 0.5;
-        double x2 = -0.5;
-        double y2 = -0.5;
-        double x3 = 1.0;
-        double y3 = -1.0;
+        double x1 = -50000.0;
+        double y1 = -50000.0;
+        double x2 = 50000.0;
+        double y2 = 50000.0;
+        double x3 = 0.0;
+        double y3 = 0.0;
 
-        // Define the standard deviation for the random distance
-        double stdDev = 0.1;
+        // Define the skewness of the distribution from which distances are drawn
+        double skewness = 2.0;
 
-        // Generate the data points and write them to a file
-        Random rand = new Random();
-        File file = new File("data.txt");
-        FileWriter writer = new FileWriter(file);
-        for (int i = 0; i < numPoints; i++) {
-            double randX, randY;
-            double randDist = Math.abs(rand.nextGaussian()) * stdDev;
-            int cluster = rand.nextInt(3);
-            switch (cluster) {
-                case 0:
-                    randX = x1 + randDist * rand.nextGaussian();
-                    randY = y1 + randDist * rand.nextGaussian();
-                    break;
-                case 1:
-                    randX = x2 + randDist * rand.nextGaussian();
-                    randY = y2 + randDist * rand.nextGaussian();
-                    break;
-                default:
-                    randX = x3 + randDist * rand.nextGaussian();
-                    randY = y3 + randDist * rand.nextGaussian();
-                    break;
-            }
-            writer.write(randX + " " + randY + "\n");
+        // Open a file writer to write the data points to a text file
+        FileWriter writer;
+        try {
+            writer = new FileWriter("data.txt");
+        } catch (IOException e) {
+            e.printStackTrace();
+            return;
         }
-        writer.close();
+
+        // Generate the data points and write them to the text file
+        Random rand = new Random();
+        for (int i = 0; i < numPoints; i++) {
+            double x, y;
+            double r = rand.nextDouble();
+            if (i % 3 == 0) {
+                r = Math.pow(r, skewness);
+                x = x1 + r * (rand.nextDouble() * 200000.0 - 100000.0);
+                y = y1 + r * (rand.nextDouble() * 200000.0 - 100000.0);
+            } else if (i % 3 == 1) {
+                r = Math.pow(r, skewness);
+                x = x2 + r * (rand.nextDouble() * 200000.0 - 100000.0);
+                y = y2 + r * (rand.nextDouble() * 200000.0 - 100000.0);
+            } else {
+                r = Math.pow(r, skewness);
+                x = x3 + r * (rand.nextDouble() * 200000.0 - 100000.0);
+                y = y3 + r * (rand.nextDouble() * 200000.0 - 100000.0);
+            }
+            writer.write(String.format("%.3f %.3f\n", x, y));
+        }
+
+        // Close the file writer
+        try {
+            writer.close();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
     }
 }
