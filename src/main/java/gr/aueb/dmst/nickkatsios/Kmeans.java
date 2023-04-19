@@ -19,6 +19,9 @@ import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
 // TODO: replace the input and output classes since we are dealing with (x,y) coordinates
 //  represented as Point2D.Double objects and not single double values
 // TODO: Simplify initial argument files
+// TODO : key Text ex 2 , 5
+// map: context.write( key: 2,5 , value: toString(point.getX , point.getY))
+// reduce: gia kathe key ex 2,5 --> 3 ,7 , 4, 9
 
 @SuppressWarnings("deprecation")
 public class Kmeans {
@@ -37,7 +40,7 @@ public class Kmeans {
      * reading file from Distributed Cache and then storing that into instance
      * variable "mCenters"
      */
-    public static class KmeansMap extends Mapper<LongWritable, Text, DoubleWritable, DoubleWritable> {
+    public static class KmeansMap extends Mapper<Text, Text, Text, Text> {
 
         // configure runs once before the whole mapping process and for each job
         // clears the old centroids and substitutes them with the new ones , located in
@@ -74,7 +77,8 @@ public class Kmeans {
          * Map function will find the minimum center of the point and emit it to
          * the reducer
          */
-        public void map(LongWritable key, Text value, Context context) throws IOException , InterruptedException {
+        public void map(Text key, Text value, Context context) throws IOException , InterruptedException {
+            // Text : 2 , 5
             // read the values from the data file
             String line = value.toString();
             String[] parts = line.split(" ");
@@ -91,40 +95,56 @@ public class Kmeans {
             }
             // Emit the nearest center and the point
             // output.collect(new DoubleWritable(nearest_center),new DoubleWritable(point));
+            String nearest_center_string = nearest_center.getX() + " " + nearest_center.getY();
+            Text nearest_center_text = new Text(nearest_center_string);
 
-            context.write(nearest_center , point);
+            String point_string = point.getX() + " " + point.getY();
+            Text point_text = new Text(point_string);
+
+
+            context.write(nearest_center_text , point_text);
 
         }
     }
 
-    public static class KmeansReduce extends Reducer<DoubleWritable, Text, DoubleWritable, Text> {
+    public static class KmeansReduce extends Reducer<Text, Text, Text, Text> {
 
         /*
          * Reduce function will emit all the points to that center and calculate
          * the next center for these points
          * Reduce runs once for every key in the mapped key-value pairs
          */
-        public void reduce(DoubleWritable key, Iterator<Text> values, Context context)
+        public void reduce(Text key, Iterator<Text> values, Context context)
                 throws IOException , InterruptedException{
+
+            // parse the key text as Point2D.value
+            String centerPoint = key.toString();
+            String[] coords = centerPoint.split(" ");
+            Point2D.Double center = new Point2D.Double(Double.parseDouble(coords[0]) , Double.parseDouble(coords[1]));
 
             double sumX = 0.0;
             double sumY = 0.0;
             int count = 0;
+            String outputPoints = "";
             for (Iterator<Text> it = values; it.hasNext(); ) {
                 Text value = it.next();
                 String[] parts = value.toString().split(" ");
                 if (parts.length == 2) {
                     Point2D.Double point = new Point2D.Double(Double.parseDouble(parts[0]), Double.parseDouble(parts[1]));
+                    outputPoints = outputPoints + " " + point.getX() + " " + point.getY();
                     sumX += point.getX();
                     sumY += point.getY();
                     count++;
                 }
             }
             Point2D.Double newCenter = new Point2D.Double(sumX / count, sumY / count);
+            String newCenterString = newCenter.getX() + " " + newCenter.getY();
+            Text newCenterText = new Text(newCenterString);
+
+            Text finalOutputPoints = new Text(outputPoints);
 
             // Emit new center and point
-            //output.collect(new DoubleWritable(newCenter), new Text(points));
-            context.write(newCenter , count);
+            context.write(newCenterText , finalOutputPoints);
         }
     }
 
@@ -154,16 +174,6 @@ public class Kmeans {
                 // upload the file to hdfs. Overwrite any existing copy.
                 DistributedCache.addCacheFile(hdfsPath.toUri(), conf);
             }
-
-//            conf.setJobName();
-//            conf.setMapOutputKeyClass(DoubleWritable.class);
-//            conf.setMapOutputValueClass(DoubleWritable.class);
-//            conf.setOutputKeyClass(DoubleWritable.class);
-//            conf.setOutputValueClass(Text.class);
-//            conf.setMapperClass(KmeansMap.class);
-//            conf.setReducerClass(KmeansReduce.class);
-//            conf.setInputFormat(TextInputFormat.class);
-//            conf.setOutputFormat(TextOutputFormat.class);
 
 
             job.setJarByClass(Kmeans.class);
