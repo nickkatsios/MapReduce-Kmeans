@@ -9,14 +9,16 @@ import org.apache.hadoop.filecache.DistributedCache;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.*;
-import org.apache.hadoop.mapred.*;
-import org.apache.hadoop.mapred.Reducer;
+import org.apache.hadoop.mapreduce.Job;
+import org.apache.hadoop.mapreduce.Mapper;
+import org.apache.hadoop.mapreduce.Reducer;
+import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
+import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
 
-// TODO: replace output.collect with context.write
+
 // TODO: replace the input and output classes since we are dealing with (x,y) coordinates
 //  represented as Point2D.Double objects and not single double values
 // TODO: Simplify initial argument files
-// TODO: Decide sorting of Point2D old and new centers to match them in the comparison: https://stackoverflow.com/questions/29030348/collections-sort-doesnt-work-on-listpoint2d-double
 
 @SuppressWarnings("deprecation")
 public class Kmeans {
@@ -35,18 +37,17 @@ public class Kmeans {
      * reading file from Distributed Cache and then storing that into instance
      * variable "mCenters"
      */
-    public static class Map extends MapReduceBase implements
-            Mapper<LongWritable, Text, DoubleWritable, DoubleWritable> {
+    public static class KmeansMap extends Mapper<LongWritable, Text, DoubleWritable, DoubleWritable> {
 
         // configure runs once before the whole mapping process and for each job
         // clears the old centroids and substitutes them with the new ones , located in
         // the file in the distributed cache
         @Override
-        public void configure(JobConf job) {
+        public void setup(Context context) {
             try {
                 // Fetch the file from Distributed Cache Read it and store the
                 // centroid in the ArrayList
-                Path[] cacheFiles = DistributedCache.getLocalCacheFiles(job);
+                Path[] cacheFiles = context.getLocalCacheFiles();
                 if (cacheFiles != null && cacheFiles.length > 0) {
                     String line;
                     mCenters.clear();
@@ -73,10 +74,7 @@ public class Kmeans {
          * Map function will find the minimum center of the point and emit it to
          * the reducer
          */
-        @Override
-        public void map(LongWritable key, Text value,
-                        OutputCollector<DoubleWritable, DoubleWritable> output,
-                        Reporter reporter) throws IOException {
+        public void map(LongWritable key, Text value, Context context) throws IOException , InterruptedException {
             // read the values from the data file
             String line = value.toString();
             String[] parts = line.split(" ");
@@ -92,23 +90,22 @@ public class Kmeans {
                 }
             }
             // Emit the nearest center and the point
-            //output.collect(new DoubleWritable(nearest_center),
-            //        new DoubleWritable(point));
+            // output.collect(new DoubleWritable(nearest_center),new DoubleWritable(point));
+
+            context.write(nearest_center , point);
+
         }
     }
 
-    public static class Reduce extends MapReduceBase implements
-            Reducer<DoubleWritable, Text, DoubleWritable, Text> {
+    public static class KmeansReduce extends Reducer<DoubleWritable, Text, DoubleWritable, Text> {
 
         /*
          * Reduce function will emit all the points to that center and calculate
          * the next center for these points
+         * Reduce runs once for every key in the mapped key-value pairs
          */
-        // reduce runs once for every key in the mapped key-value pairs
-        @Override
-        public void reduce(DoubleWritable key, Iterator<Text> values,
-                           OutputCollector<DoubleWritable, Text> output, Reporter reporter)
-                throws IOException {
+        public void reduce(DoubleWritable key, Iterator<Text> values, Context context)
+                throws IOException , InterruptedException{
 
             double sumX = 0.0;
             double sumY = 0.0;
@@ -127,6 +124,7 @@ public class Kmeans {
 
             // Emit new center and point
             //output.collect(new DoubleWritable(newCenter), new Text(points));
+            context.write(newCenter , count);
         }
     }
 
@@ -145,7 +143,8 @@ public class Kmeans {
         int iteration = 0;
         boolean isdone = false;
         while (isdone == false) {
-            JobConf conf = new JobConf(Kmeans.class);
+            Configuration conf = new Configuration();
+            Job job = Job.getInstance(conf, JOB_NAME);
             if (iteration == 0) {
                 Path hdfsPath = new Path(input + CENTROID_FILE_NAME);
                 // upload the file to hdfs. Overwrite any existing copy.
@@ -156,21 +155,28 @@ public class Kmeans {
                 DistributedCache.addCacheFile(hdfsPath.toUri(), conf);
             }
 
-            conf.setJobName(JOB_NAME);
-            conf.setMapOutputKeyClass(DoubleWritable.class);
-            conf.setMapOutputValueClass(DoubleWritable.class);
-            conf.setOutputKeyClass(DoubleWritable.class);
-            conf.setOutputValueClass(Text.class);
-            conf.setMapperClass(Map.class);
-            conf.setReducerClass(Reduce.class);
-            conf.setInputFormat(TextInputFormat.class);
-            conf.setOutputFormat(TextOutputFormat.class);
+//            conf.setJobName();
+//            conf.setMapOutputKeyClass(DoubleWritable.class);
+//            conf.setMapOutputValueClass(DoubleWritable.class);
+//            conf.setOutputKeyClass(DoubleWritable.class);
+//            conf.setOutputValueClass(Text.class);
+//            conf.setMapperClass(KmeansMap.class);
+//            conf.setReducerClass(KmeansReduce.class);
+//            conf.setInputFormat(TextInputFormat.class);
+//            conf.setOutputFormat(TextOutputFormat.class);
 
-            FileInputFormat.setInputPaths(conf,
-                    new Path(input + DATA_FILE_NAME));
-            FileOutputFormat.setOutputPath(conf, new Path(output));
 
-            JobClient.runJob(conf);
+            job.setJarByClass(Kmeans.class);
+            job.setMapperClass(KmeansMap.class);
+            job.setReducerClass(KmeansReduce.class);
+            job.setOutputKeyClass(Text.class);
+            job.setOutputValueClass(IntWritable.class);
+
+            FileInputFormat.setInputPaths(job, new Path(input + DATA_FILE_NAME));
+            FileOutputFormat.setOutputPath(job, new Path(output));
+
+//            JobClient.runJob(job);
+            job.waitForCompletion(true);
 
             Path ofile = new Path(output + OUTPUT_FILE_NAME);
             FileSystem fs = FileSystem.get(new Configuration());
@@ -208,8 +214,20 @@ public class Kmeans {
 
             // Sort the old centroid and new centroid and check for convergence condition
             //we sort them to check if they are close enough one by one
-            Collections.sort(centers_next);
-            Collections.sort(centers_prev);
+
+
+            // sorting is done based on the x coordinate
+            Collections.sort(centers_next, new Comparator<Point2D.Double>() {
+                public int compare(Point2D.Double p1, Point2D.Double p2) {
+                    return Double.compare(p1.getX(), p2.getX());
+                }
+            });
+
+            Collections.sort(centers_prev, new Comparator<Point2D.Double>() {
+                public int compare(Point2D.Double p1, Point2D.Double p2) {
+                    return Double.compare(p1.getX(), p2.getX());
+                }
+            });
 
             Iterator<Point2D.Double> it = centers_prev.iterator();
 
