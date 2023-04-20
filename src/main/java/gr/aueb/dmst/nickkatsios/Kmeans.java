@@ -18,8 +18,6 @@ import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
 
 // TODO: replace the input and output classes since we are dealing with (x,y) coordinates
 //  represented as Point2D.Double objects and not single double values
-// TODO: Simplify initial argument files
-// TODO : key Text ex 2 , 5
 // map: context.write( key: 2,5 , value: toString(point.getX , point.getY))
 // reduce: gia kathe key ex 2,5 --> 3 ,7 , 4, 9
 
@@ -40,17 +38,22 @@ public class Kmeans {
      * reading file from Distributed Cache and then storing that into instance
      * variable "mCenters"
      */
-    public static class KmeansMap extends Mapper<Text, Text, Text, Text> {
+    public static class KmeansMap extends Mapper<LongWritable , Text, Text, Text> {
+
+        // map logwritable because When you read a file with a M/R program,
+        // the input key of your mapper should be the index of the line in the file,
+        // while the input value will be the full line.
 
         // configure runs once before the whole mapping process and for each job
         // clears the old centroids and substitutes them with the new ones , located in
         // the file in the distributed cache
         @Override
         public void setup(Context context) {
+            Configuration conf = context.getConfiguration();
             try {
                 // Fetch the file from Distributed Cache Read it and store the
                 // centroid in the ArrayList
-                Path[] cacheFiles = context.getLocalCacheFiles();
+                Path[] cacheFiles = DistributedCache.getLocalCacheFiles(conf);
                 if (cacheFiles != null && cacheFiles.length > 0) {
                     String line;
                     mCenters.clear();
@@ -76,8 +79,11 @@ public class Kmeans {
         /*
          * Map function will find the minimum center of the point and emit it to
          * the reducer
+         * LongWritable because When you read a file with a M/R program,
+         * the input key of your mapper should be the index of the line in the file,
+         * while the input value will be the full line.
          */
-        public void map(Text key, Text value, Context context) throws IOException , InterruptedException {
+        public void map(LongWritable  key, Text value, Context context) throws IOException , InterruptedException {
             // Text : 2 , 5
             // read the values from the data file
             String line = value.toString();
@@ -93,15 +99,14 @@ public class Kmeans {
                     minDist = dist;
                 }
             }
-            // Emit the nearest center and the point
-            // output.collect(new DoubleWritable(nearest_center),new DoubleWritable(point));
+
             String nearest_center_string = nearest_center.getX() + " " + nearest_center.getY();
             Text nearest_center_text = new Text(nearest_center_string);
 
             String point_string = point.getX() + " " + point.getY();
             Text point_text = new Text(point_string);
 
-
+            // Emit the nearest center and the point
             context.write(nearest_center_text , point_text);
 
         }
@@ -143,7 +148,7 @@ public class Kmeans {
 
             Text finalOutputPoints = new Text(outputPoints);
 
-            // Emit new center and point
+            // Emit new center and points
             context.write(newCenterText , finalOutputPoints);
         }
     }
@@ -153,7 +158,9 @@ public class Kmeans {
     }
 
     public static void run(String[] args) throws Exception {
+        // in = path to data.txt in hdfs
         IN = args[0];
+        // out = path to output folder in hdfs
         OUT = args[1];
         String input = IN;
         String output = OUT + System.nanoTime();
@@ -167,35 +174,39 @@ public class Kmeans {
             Job job = Job.getInstance(conf, JOB_NAME);
             if (iteration == 0) {
                 Path hdfsPath = new Path(input + CENTROID_FILE_NAME);
-                // upload the file to hdfs. Overwrite any existing copy.
-                DistributedCache.addCacheFile(hdfsPath.toUri(), conf);
+                // upload the file to hdfs cache. Overwrite any existing copy.
+                DistributedCache.addCacheFile(hdfsPath.toUri(), job.getConfiguration());
             } else {
                 Path hdfsPath = new Path(again_input + OUTPUT_FILE_NAME);
                 // upload the file to hdfs. Overwrite any existing copy.
-                DistributedCache.addCacheFile(hdfsPath.toUri(), conf);
+                DistributedCache.addCacheFile(hdfsPath.toUri(), job.getConfiguration());
             }
-
-
+            // set job configs
             job.setJarByClass(Kmeans.class);
             job.setMapperClass(KmeansMap.class);
             job.setReducerClass(KmeansReduce.class);
             job.setOutputKeyClass(Text.class);
-            job.setOutputValueClass(IntWritable.class);
+            job.setOutputValueClass(Text.class);
 
             FileInputFormat.setInputPaths(job, new Path(input + DATA_FILE_NAME));
             FileOutputFormat.setOutputPath(job, new Path(output));
 
-//            JobClient.runJob(job);
+            //ait for job to be completed --> JOB = 1 ITERATION
             job.waitForCompletion(true);
 
+            // once the job is finished the final output is spit out to outputNanotime/
+            // it consists of text: newCenterX newCenterY point1X point1Y point2X point2Y ...
+            // so we need to get this file and read the coordinates of the new centers
             Path ofile = new Path(output + OUTPUT_FILE_NAME);
             FileSystem fs = FileSystem.get(new Configuration());
-            BufferedReader br = new BufferedReader(new InputStreamReader(
-                    fs.open(ofile)));
+            BufferedReader br = new BufferedReader(new InputStreamReader(fs.open(ofile)));
             List<Point2D.Double> centers_next = new ArrayList<Point2D.Double>();
+            // for each line = newCenterX newCenterY point1X point1Y point2X point2Y ...
             String line = br.readLine();
             while (line != null) {
                 String[] parts = line.split(" ");
+                // get the first 2 elements which are the X , Y of the new center
+                // and construct a point2D
                 Point2D.Double center = new Point2D.Double(Double.parseDouble(parts[0]) , Double.parseDouble(parts[1]));
                 centers_next.add(center);
                 line = br.readLine();
@@ -210,8 +221,7 @@ public class Kmeans {
             }
             Path prevfile = new Path(prev);
             FileSystem fs1 = FileSystem.get(new Configuration());
-            BufferedReader br1 = new BufferedReader(new InputStreamReader(
-                    fs1.open(prevfile)));
+            BufferedReader br1 = new BufferedReader(new InputStreamReader(fs1.open(prevfile)));
             List<Point2D.Double> centers_prev = new ArrayList<Point2D.Double>();
             line = br1.readLine();
             while (line != null) {
