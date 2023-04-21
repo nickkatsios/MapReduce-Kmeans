@@ -14,6 +14,7 @@ import org.apache.hadoop.mapreduce.Mapper;
 import org.apache.hadoop.mapreduce.Reducer;
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
 import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
+import org.apache.hadoop.mapreduce.lib.output.TextOutputFormat;
 
 
 // TODO: replace the input and output classes since we are dealing with (x,y) coordinates
@@ -26,7 +27,7 @@ public class Kmeans {
     public static String OUT = "outfile";
     public static String IN = "inputlarger";
     public static String CENTROID_FILE_NAME = "/centroid.txt";
-    public static String OUTPUT_FILE_NAME = "/part-00000";
+    public static String OUTPUT_FILE_NAME = "/part-r-00000";
     public static String DATA_FILE_NAME = "/data.txt";
     public static String JOB_NAME = "KMeans";
 
@@ -83,6 +84,7 @@ public class Kmeans {
          * the input key of your mapper should be the index of the line in the file,
          * while the input value will be the full line.
          */
+        @Override
         public void map(LongWritable  key, Text value, Context context) throws IOException , InterruptedException {
             // Text : 2 , 5
             // read the values from the data file
@@ -119,20 +121,16 @@ public class Kmeans {
          * the next center for these points
          * Reduce runs once for every key in the mapped key-value pairs
          */
-        public void reduce(Text key, Iterator<Text> values, Context context)
+        @Override
+        public void reduce(Text key, Iterable<Text> values, Context context)
                 throws IOException , InterruptedException{
 
-            // parse the key text as Point2D.value
-            String centerPoint = key.toString();
-            String[] coords = centerPoint.split(" ");
-            Point2D.Double center = new Point2D.Double(Double.parseDouble(coords[0]) , Double.parseDouble(coords[1]));
-
+            System.out.println("reduce for key: " + key);
             double sumX = 0.0;
             double sumY = 0.0;
             int count = 0;
             String outputPoints = "";
-            for (Iterator<Text> it = values; it.hasNext(); ) {
-                Text value = it.next();
+            for (Text value : values ) {
                 String[] parts = value.toString().split(" ");
                 if (parts.length == 2) {
                     Point2D.Double point = new Point2D.Double(Double.parseDouble(parts[0]), Double.parseDouble(parts[1]));
@@ -187,6 +185,7 @@ public class Kmeans {
             job.setReducerClass(KmeansReduce.class);
             job.setOutputKeyClass(Text.class);
             job.setOutputValueClass(Text.class);
+            job.setOutputFormatClass(TextOutputFormat.class);
 
             FileInputFormat.setInputPaths(job, new Path(input + DATA_FILE_NAME));
             FileOutputFormat.setOutputPath(job, new Path(output));
