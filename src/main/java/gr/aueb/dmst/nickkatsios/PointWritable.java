@@ -7,6 +7,8 @@ import java.io.DataOutput;
 import java.io.IOException;
 import java.util.Objects;
 
+// Custom class for handling (x,y) data in hadoop
+// Just like a Point2D.Double
 public class PointWritable implements WritableComparable<PointWritable> {
     private DoubleWritable x;
     private DoubleWritable y;
@@ -29,18 +31,21 @@ public class PointWritable implements WritableComparable<PointWritable> {
         return y.get();
     }
 
+    // writing to context
     @Override
     public void write(DataOutput out) throws IOException {
         x.write(out);
         y.write(out);
     }
 
+    // reading from context
     @Override
     public void readFields(DataInput in) throws IOException {
         x.readFields(in);
         y.readFields(in);
     }
 
+    // comparing keys for reducing
     @Override
     public int compareTo(PointWritable other) {
         int xCompare = x.compareTo(other.x);
@@ -50,6 +55,7 @@ public class PointWritable implements WritableComparable<PointWritable> {
         return xCompare;
     }
 
+    // unique hash for each point
     @Override
     public int hashCode() {
         return Objects.hash(x, y);
