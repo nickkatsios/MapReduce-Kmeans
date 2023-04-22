@@ -5,10 +5,10 @@ The program was developed and tested on a **Windows 10** machine using hadoop-3.
 
 ### [Contents](#)
 1. [Description](#Descr)
-1. [Installing & Configuring Hadoop](#Inst)
-2. [Running K-Means on Hadoop](#Run)
-3. [Results](#Results)
-4. [Notes](#Notes)
+2. [Installing & Configuring Hadoop](#Inst)
+3. [Running K-Means on Hadoop](#Run)
+4. [Results](#Results)
+5. [Notes](#Notes)
 
 ### [**Project Description**](#) <a name="descr"></a>
 
@@ -43,10 +43,11 @@ $ hdfs dfs -copyFromLocal <path-to-data.txt> <destination-folder-in-hdfs>
 $ hdfs dfs -copyFromLocal <path-to-centroid.txt> <destination-folder-in-hdfs>
 ```
 
-**1.** Clone this repository:
+**1.** Clone this repository and navigate tothe folder:
 
 ``` shell
 $ git clone https://github.com/nickkatsios/MapReduce-Kmeans.git
+$ cd MapReduce-Kmeans
 ```
 **2.** Build project using Maven:
 
